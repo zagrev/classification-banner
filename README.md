@@ -16,6 +16,7 @@ This application can show the classification at the top and bottom of the screen
 - **Selectable settings file** - the configuration file can be chosen on the command line, which is useful for per-environment or per-classification deployments.
 - **Fail-fast on bad configuration** - an explicitly requested settings file that is missing or malformed aborts startup with an error dialog rather than silently displaying default markings.
 - **Automatic startup registration** - the executable registers itself under `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run`, preserving the selected settings file, and fails silently when blocked by group policy.
+- **Continuous integration** - a GitHub Actions workflow builds, tests, and publishes the application on every push and pull request.
 
 ## Known limitations
 
@@ -71,3 +72,19 @@ dotnet test --collect:"XPlat Code Coverage"
 The suite covers the behavior that can be verified without a live desktop session: command line interpretation, configuration loading and its failure policy, and banner placement geometry. Tests assert on observable outcomes - which settings file is selected, whether startup proceeds or aborts, where a banner ends up on screen - rather than on how those results are reached.
 
 The WPF hosts (`App`, `BannerWindow`) and the shell interop wrapper (`AppBarHelper`) are marked `[ExcludeFromCodeCoverage]`. They require a running message loop and a live shell, so their logic was factored into `CommandLineOptions`, `ConfigurationLoader`, and `BannerGeometry`, which are covered directly. Their remaining bodies are composition and P/Invoke declarations, and still need manual verification on a real multi-monitor desktop.
+
+## Continuous integration
+
+`.github/workflows/build.yml` runs on every push and pull request to `main` or `master`, and can be triggered manually from the Actions tab.
+
+The job runs on `windows-latest`; the `net9.0-windows` target framework with WPF and Windows Forms cannot be built on Linux runners. It restores, builds in `Release`, runs the test suite with coverage collection, then publishes the application.
+
+Three artifacts are uploaded on each run:
+
+| Artifact | Contents |
+| --- | --- |
+| `test-results` | `.trx` test report, uploaded even when tests fail |
+| `coverage` | Cobertura coverage report, uploaded even when tests fail |
+| `ClassificationBannerApp` | Published application binaries and `appsettings.json` |
+
+The workflow targets the project files directly rather than the solution. The solution uses the newer `.slnx` format, which older SDK versions cannot parse, so both the 9.x and 10.x SDKs are installed to keep CI aligned with local development.

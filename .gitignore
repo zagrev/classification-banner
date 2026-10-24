@@ -55,3 +55,9 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+
+# Visual Studio workspace state
+.vs/
+
+# Local publish output (produced by the build pipeline)
+publish/

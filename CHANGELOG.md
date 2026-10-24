@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `AppBarHelper.NotifyPosChanged` sends `ABM_WINDOWPOSCHANGED` after placement so the shell refreshes its work-area bookkeeping.
 - **Unit test suite.** New xUnit project at `tests/ClassificationBannerApp.Tests.csproj` with 76 tests covering command line interpretation, configuration loading and its failure policy, banner placement geometry, and the settings contract. Line coverage of the testable code is 100% (98.63% branch). Tests assert on observable behavior rather than implementation detail.
 - **Solution file.** Added `ClassificationBannerApp.sln` containing the application and test projects, so the suite is discoverable by Test Explorer and `dotnet test`.
+- **GitHub Actions build pipeline.** New `.github/workflows/build.yml` runs on push and pull request to `main`/`master`, and on manual dispatch. It restores, builds in `Release`, runs the test suite with coverage collection, and publishes the application on a `windows-latest` runner, which is required because `net9.0-windows` with WPF cannot be built on Linux. Test results, coverage reports, and published binaries are uploaded as artifacts; the first two use `if: always()` so failing runs remain diagnosable.
 
 ### Fixed
 
@@ -29,6 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **WPF managed layout properties disagreed with the native window rectangle.** `Left`, `Top`, `Width`, and `Height` are now synced to the granted rectangle (converted from physical pixels to DIPs), so subsequent layout passes no longer reposition the banner.
 - **Displaced banners never recovered.** The enforcement timer passed `SWP_NOMOVE | SWP_NOSIZE`, correcting only Z-order. It now re-asserts the full granted rectangle each tick.
 - **`CommandLineOptions` hardened against inputs the previous parser mishandled.** A trailing `--config` with no value now yields no override instead of falling through to later arguments; null and empty argument entries are skipped rather than treated as paths.
+- **`appsettings.json` was never deployed.** The file had no `CopyToOutputDirectory` setting, so it was absent from both build and publish output. `ConfigurationLoader` reads it from the executable directory, meaning a deployed build silently fell back to the built-in `UNCLASSIFIED` defaults instead of the configured markings - a significant defect for a classification-marking tool. Added a `None Update` item with `PreserveNewest`; the file now appears in publish output.
 
 ### Changed
 
@@ -45,6 +47,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `App`, `BannerWindow`, and `AppBarHelper` now delegate to these units rather than carrying private copies of the same logic.
 - Marked `App`, `BannerWindow`, and `AppBarHelper` `[ExcludeFromCodeCoverage]`; they require a live WPF message loop and shell, and their decision logic now lives in the extracted units.
 - Excluded `tests\**` from the application project's default compile glob, which was otherwise pulling test sources into the WPF temporary project and breaking the build.
+- Added `.vs/` and `publish/` to `.gitignore`; the Visual Studio workspace folder was previously untracked-but-not-ignored, and the pipeline's local publish output would otherwise appear as pending changes.
 
 ### Removed
 

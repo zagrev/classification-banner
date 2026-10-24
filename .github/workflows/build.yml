@@ -1,0 +1,75 @@
+name: Build
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+env:
+  APP_PROJECT: ClassificationBannerApp.csproj
+  TEST_PROJECT: tests/ClassificationBannerApp.Tests.csproj
+  CONFIGURATION: Release
+
+jobs:
+  build:
+    # WPF and Windows Forms target net9.0-windows, which cannot be built on Linux runners.
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          # The app targets net9.0-windows. The 10.x SDK is installed alongside so the
+          # build matches local development, where the solution uses the .slnx format
+          # that older SDKs cannot parse.
+          dotnet-version: |
+            9.0.x
+            10.0.x
+
+      - name: Restore
+        run: |
+          dotnet restore ${{ env.APP_PROJECT }}
+          dotnet restore ${{ env.TEST_PROJECT }}
+
+      - name: Build
+        run: dotnet build ${{ env.TEST_PROJECT }} --configuration ${{ env.CONFIGURATION }} --no-restore
+
+      - name: Test
+        run: >
+          dotnet test ${{ env.TEST_PROJECT }}
+          --configuration ${{ env.CONFIGURATION }}
+          --no-build
+          --logger "trx;LogFileName=test-results.trx"
+          --collect:"XPlat Code Coverage"
+          --results-directory TestResults
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: TestResults/**/*.trx
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: TestResults/**/coverage.cobertura.xml
+
+      - name: Publish
+        run: >
+          dotnet publish ${{ env.APP_PROJECT }}
+          --configuration ${{ env.CONFIGURATION }}
+          --output publish
+
+      - name: Upload application
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClassificationBannerApp
+          path: publish
