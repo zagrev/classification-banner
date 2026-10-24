@@ -1,0 +1,180 @@
+name: Release
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+    inputs:
+      increment:
+        description: 'Version component to increment'
+        required: true
+        default: 'Patch'
+        type: choice
+        options:
+          - Patch
+          - Minor
+          - Major
+
+# Permit the job to commit the version bump, push the tag, and create the release.
+permissions:
+  contents: write
+
+# Never let two releases run at once; concurrent version bumps would collide.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  APP_PROJECT: ClassificationBannerApp.csproj
+  TEST_PROJECT: tests/ClassificationBannerApp.Tests.csproj
+  CONFIGURATION: Release
+  RUNTIME_IDENTIFIER: win-x64
+  MINIMUM_LINE_COVERAGE: '85'
+
+jobs:
+  release:
+    # WPF and Windows Forms target net9.0-windows, which cannot be built on Linux runners.
+    runs-on: windows-latest
+
+    # Skip the automatic commit this workflow itself pushes, otherwise each release
+    # would trigger another release.
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            9.0.x
+            10.0.x
+
+      - name: Restore
+        run: |
+          dotnet restore ${{ env.APP_PROJECT }}
+          dotnet restore ${{ env.TEST_PROJECT }}
+
+      # Build and test run before the version is bumped, so a failing build never
+      # consumes a version number or creates a tag.
+      - name: Build
+        run: dotnet build ${{ env.TEST_PROJECT }} --configuration ${{ env.CONFIGURATION }} --no-restore
+
+      - name: Test
+        run: >
+          dotnet test ${{ env.TEST_PROJECT }}
+          --configuration ${{ env.CONFIGURATION }}
+          --no-build
+          --logger "trx;LogFileName=test-results.trx"
+          --collect:"XPlat Code Coverage"
+          --results-directory TestResults
+
+      - name: Verify coverage threshold
+        shell: pwsh
+        run: >
+          ./build/Check-Coverage.ps1
+          -ResultsDirectory TestResults
+          -MinimumLineRate ${{ env.MINIMUM_LINE_COVERAGE }}
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: TestResults/**/*.trx
+
+      # Everything below runs only after a fully successful build.
+      - name: Increment version
+        id: version
+        shell: pwsh
+        run: >
+          ./build/Bump-Version.ps1
+          -VersionFile VERSION
+          -Increment ${{ inputs.increment || 'Patch' }}
+
+      - name: Verify tag does not already exist
+        shell: pwsh
+        run: |
+          $tag = '${{ steps.version.outputs.tag }}'
+          git fetch --tags --quiet
+          if (git tag --list $tag) {
+            Write-Error "Tag $tag already exists. Reconcile the VERSION file before releasing."
+            exit 1
+          }
+          Write-Host "Tag $tag is available."
+
+      - name: Publish self-contained
+        # Bundles the .NET runtime so the banner can be deployed to locked-down
+        # workstations with no runtime installed. appsettings.json is deliberately
+        # left beside the executable so it remains operator-editable.
+        run: >
+          dotnet publish ${{ env.APP_PROJECT }}
+          --configuration ${{ env.CONFIGURATION }}
+          --runtime ${{ env.RUNTIME_IDENTIFIER }}
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          --output publish/self-contained
+
+      - name: Publish framework-dependent
+        # Requires the .NET runtime on the target machine, but is a fraction of the
+        # size - preferable where the runtime is already managed by the enterprise.
+        run: >
+          dotnet publish ${{ env.APP_PROJECT }}
+          --configuration ${{ env.CONFIGURATION }}
+          --runtime ${{ env.RUNTIME_IDENTIFIER }}
+          --self-contained false
+          -p:PublishSingleFile=true
+          --output publish/framework-dependent
+
+      - name: Package release archives
+        shell: pwsh
+        run: |
+          $tag = '${{ steps.version.outputs.tag }}'
+          $rid = '${{ env.RUNTIME_IDENTIFIER }}'
+
+          Compress-Archive -Path publish/self-contained/* `
+            -DestinationPath "ClassificationBannerApp-$tag-$rid-self-contained.zip"
+
+          Compress-Archive -Path publish/framework-dependent/* `
+            -DestinationPath "ClassificationBannerApp-$tag-$rid-framework-dependent.zip"
+
+          Get-ChildItem -Filter 'ClassificationBannerApp-*.zip' |
+            Select-Object Name, @{ Name = 'MB'; Expression = { [math]::Round($_.Length / 1MB, 2) } } |
+            Format-Table -AutoSize
+
+      - name: Upload self-contained artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClassificationBannerApp-${{ env.RUNTIME_IDENTIFIER }}-self-contained
+          path: publish/self-contained
+
+      - name: Upload framework-dependent artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClassificationBannerApp-${{ env.RUNTIME_IDENTIFIER }}-framework-dependent
+          path: publish/framework-dependent
+
+      - name: Commit and tag version
+        shell: pwsh
+        run: |
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add VERSION
+          git commit -m 'Release ${{ steps.version.outputs.tag }} [skip ci]'
+          git tag -a '${{ steps.version.outputs.tag }}' -m 'Release ${{ steps.version.outputs.tag }}'
+          git push origin HEAD:${{ github.ref_name }}
+          git push origin '${{ steps.version.outputs.tag }}'
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ steps.version.outputs.tag }}
+          generate_release_notes: true
+          files: |
+            ClassificationBannerApp-${{ steps.version.outputs.tag }}-${{ env.RUNTIME_IDENTIFIER }}-self-contained.zip
+            ClassificationBannerApp-${{ steps.version.outputs.tag }}-${{ env.RUNTIME_IDENTIFIER }}-framework-dependent.zip

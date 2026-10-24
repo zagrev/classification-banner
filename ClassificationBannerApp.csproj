@@ -15,6 +15,15 @@
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
   </PropertyGroup>
 
+  <!-- The default settings file is read from the executable directory at startup, so it
+       must be copied to the output and included in publish output. Without this the
+       application silently falls back to built-in defaults. -->
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
   <!-- The test project lives beneath this directory; keep its sources out of the
        application's default compile glob. -->
   <ItemGroup>
