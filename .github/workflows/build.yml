@@ -11,6 +11,8 @@ env:
   APP_PROJECT: ClassificationBannerApp.csproj
   TEST_PROJECT: tests/ClassificationBannerApp.Tests.csproj
   CONFIGURATION: Release
+  RUNTIME_IDENTIFIER: win-x64
+  MINIMUM_LINE_COVERAGE: '85'
 
 jobs:
   build:
@@ -48,6 +50,13 @@ jobs:
           --collect:"XPlat Code Coverage"
           --results-directory TestResults
 
+      - name: Verify coverage threshold
+        shell: pwsh
+        run: >
+          ./build/Check-Coverage.ps1
+          -ResultsDirectory TestResults
+          -MinimumLineRate ${{ env.MINIMUM_LINE_COVERAGE }}
+
       - name: Upload test results
         uses: actions/upload-artifact@v4
         if: always()
@@ -63,13 +72,20 @@ jobs:
           path: TestResults/**/coverage.cobertura.xml
 
       - name: Publish
+        # Self-contained single file so the banner can be deployed to locked-down
+        # workstations without the .NET runtime installed. appsettings.json is
+        # deliberately left alongside the executable so it remains operator-editable.
         run: >
           dotnet publish ${{ env.APP_PROJECT }}
           --configuration ${{ env.CONFIGURATION }}
+          --runtime ${{ env.RUNTIME_IDENTIFIER }}
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
           --output publish
 
       - name: Upload application
         uses: actions/upload-artifact@v4
         with:
-          name: ClassificationBannerApp
+          name: ClassificationBannerApp-${{ env.RUNTIME_IDENTIFIER }}
           path: publish

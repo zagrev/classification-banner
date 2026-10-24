@@ -77,7 +77,14 @@ The WPF hosts (`App`, `BannerWindow`) and the shell interop wrapper (`AppBarHelp
 
 `.github/workflows/build.yml` runs on every push and pull request to `main` or `master`, and can be triggered manually from the Actions tab.
 
-The job runs on `windows-latest`; the `net9.0-windows` target framework with WPF and Windows Forms cannot be built on Linux runners. It restores, builds in `Release`, runs the test suite with coverage collection, then publishes the application.
+The job runs on `windows-latest`; the `net9.0-windows` target framework with WPF and Windows Forms cannot be built on Linux runners. It restores, builds in `Release`, runs the test suite with coverage collection, verifies the coverage threshold, then publishes the application.
+
+Line coverage is gated at 85% by `build/Check-Coverage.ps1`, which reads the Cobertura report and exits non-zero if the threshold is not met. Run it locally the same way CI does:
+
+```
+dotnet test tests/ClassificationBannerApp.Tests.csproj --collect:"XPlat Code Coverage" --results-directory TestResults
+./build/Check-Coverage.ps1 -ResultsDirectory TestResults -MinimumLineRate 85
+```
 
 Three artifacts are uploaded on each run:
 
@@ -85,6 +92,8 @@ Three artifacts are uploaded on each run:
 | --- | --- |
 | `test-results` | `.trx` test report, uploaded even when tests fail |
 | `coverage` | Cobertura coverage report, uploaded even when tests fail |
-| `ClassificationBannerApp` | Published application binaries and `appsettings.json` |
+| `ClassificationBannerApp-win-x64` | Self-contained single-file executable and `appsettings.json` |
+
+The published executable is self-contained for `win-x64`, so it runs on workstations without the .NET runtime installed. It is roughly 160 MB as a result. `appsettings.json` is deliberately left as a separate file beside the executable rather than embedded, so the markings can be changed without a rebuild.
 
 The workflow targets the project files directly rather than the solution. The solution uses the newer `.slnx` format, which older SDK versions cannot parse, so both the 9.x and 10.x SDKs are installed to keep CI aligned with local development.
