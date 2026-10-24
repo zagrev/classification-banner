@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Windows;
 using System.Windows.Threading;
@@ -7,6 +8,12 @@ using Microsoft.Win32;
 
 namespace ClassificationBanner
 {
+    /// <summary>
+    /// Application composition root. Excluded from coverage because it requires a live WPF
+    /// message loop, the shell, and the registry; its decision logic is factored into
+    /// <see cref="CommandLineOptions"/> and <see cref="ConfigurationLoader"/>.
+    /// </summary>
+    [ExcludeFromCodeCoverage]
     public partial class App : System.Windows.Application
     {
         private BannerConfig _config = new BannerConfig();
@@ -23,10 +30,17 @@ namespace ClassificationBanner
             this.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
             // Resolve any user-supplied settings file before configuration load
-            _configPathOverride = ParseConfigPathArgument(e.Args);
+            _configPathOverride = CommandLineOptions.ParseConfigPath(e.Args);
 
             // Load configurations first - terminates the process on an invalid explicit path
-            _config = LoadConfiguration(_configPathOverride);
+            var result = new ConfigurationLoader().Load(_configPathOverride);
+
+            if (result.IsFatal)
+            {
+                FailFast(result.ErrorMessage ?? "The settings file could not be loaded.");
+            }
+
+            _config = result.Config;
 
             // Only reached when configuration is valid, so the registry entry is safe to write
             EnsureStartupRegistration();
@@ -36,67 +50,6 @@ namespace ClassificationBanner
 
             // Bind global operating system display hardware configuration change events
             SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
-        }
-
-        /// <summary>
-        /// Extracts the settings file path from the command line. Accepts
-        /// "--config &lt;path&gt;", "--config=&lt;path&gt;", the "-c" short form,
-        /// or a single bare positional path. Returns null when unspecified.
-        /// </summary>
-        private static string? ParseConfigPathArgument(string[] args)
-        {
-            for (int i = 0; i < args.Length; i++)
-            {
-                string arg = args[i];
-
-                if (arg.StartsWith("--config=", StringComparison.OrdinalIgnoreCase))
-                {
-                    return NormalizePath(arg.Substring("--config=".Length));
-                }
-
-                if (arg.StartsWith("-c=", StringComparison.OrdinalIgnoreCase))
-                {
-                    return NormalizePath(arg.Substring("-c=".Length));
-                }
-
-                bool isConfigSwitch =
-                    string.Equals(arg, "--config", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(arg, "-c", StringComparison.OrdinalIgnoreCase);
-
-                if (isConfigSwitch && i + 1 < args.Length)
-                {
-                    return NormalizePath(args[i + 1]);
-                }
-
-                // Bare positional path, e.g. launched via file association or shortcut
-                if (!arg.StartsWith("-", StringComparison.Ordinal))
-                {
-                    return NormalizePath(arg);
-                }
-            }
-
-            return null;
-        }
-
-        private static string? NormalizePath(string candidate)
-        {
-            candidate = candidate.Trim().Trim('"');
-
-            if (string.IsNullOrWhiteSpace(candidate))
-            {
-                return null;
-            }
-
-            try
-            {
-                // Resolve relative paths against the working directory, not the exe directory
-                return Path.GetFullPath(candidate);
-            }
-            catch
-            {
-                // Malformed path (invalid characters, too long, etc.)
-                return null;
-            }
         }
 
         private void OnDisplaySettingsChanged(object? sender, EventArgs e)
@@ -157,57 +110,6 @@ namespace ClassificationBanner
         }
 
         /// <summary>
-        /// Loads banner configuration. When <paramref name="overridePath"/> is supplied
-        /// it takes precedence over the default appsettings.json next to the executable.
-        /// An explicitly requested file that is missing or malformed is treated as fatal,
-        /// since silently falling back to defaults could understate the classification level.
-        /// </summary>
-        private BannerConfig LoadConfiguration(string? overridePath)
-        {
-            bool isExplicit = !string.IsNullOrEmpty(overridePath);
-
-            string configPath = overridePath
-                ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
-
-            if (!File.Exists(configPath))
-            {
-                if (isExplicit)
-                {
-                    FailFast($"The specified settings file could not be found:\n\n{configPath}");
-                }
-
-                return new BannerConfig();
-            }
-
-            try
-            {
-                string jsonText = File.ReadAllText(configPath);
-                var parsedConfig = System.Text.Json.JsonSerializer.Deserialize<BannerConfig>(jsonText);
-
-                if (parsedConfig == null)
-                {
-                    if (isExplicit)
-                    {
-                        FailFast($"The settings file contains no configuration object:\n\n{configPath}");
-                    }
-
-                    return new BannerConfig();
-                }
-
-                return parsedConfig;
-            }
-            catch (Exception ex)
-            {
-                if (isExplicit)
-                {
-                    FailFast($"The settings file could not be read:\n\n{configPath}\n\n{ex.Message}");
-                }
-
-                return new BannerConfig(); // Safe fallback to hardcoded defaults on parsing issues
-            }
-        }
-
-        /// <summary>
         /// Reports an unrecoverable configuration error and terminates the process.
         /// Does not return.
         /// </summary>
@@ -241,9 +143,7 @@ namespace ClassificationBanner
                         object? existingValue = key.GetValue(RegistryKeyName);
 
                         // Persist the settings file selection so it survives a reboot
-                        string expectedValue = string.IsNullOrEmpty(_configPathOverride)
-                            ? $"\"{executablePath}\""
-                            : $"\"{executablePath}\" --config \"{_configPathOverride}\"";
+                        string expectedValue = CommandLineOptions.BuildStartupCommand(executablePath, _configPathOverride);
 
                         if (existingValue == null || existingValue.ToString() != expectedValue)
                         {

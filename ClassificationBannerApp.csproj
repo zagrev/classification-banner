@@ -14,4 +14,12 @@
          from the primary display, offsetting AppBar placement. -->
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
   </PropertyGroup>
+
+  <!-- The test project lives beneath this directory; keep its sources out of the
+       application's default compile glob. -->
+  <ItemGroup>
+    <Compile Remove="tests\**" />
+    <None Remove="tests\**" />
+    <Page Remove="tests\**" />
+  </ItemGroup>
 </Project>

@@ -55,3 +55,19 @@ Configuration failure behavior differs depending on how the file was selected:
 | `<path>` | A single bare path is treated as the settings file. |
 
 Relative paths resolve against the current working directory. The selected path is written into the startup registry entry, so the choice persists across reboots.
+
+## Tests
+
+```
+dotnet test
+```
+
+With coverage:
+
+```
+dotnet test --collect:"XPlat Code Coverage"
+```
+
+The suite covers the behavior that can be verified without a live desktop session: command line interpretation, configuration loading and its failure policy, and banner placement geometry. Tests assert on observable outcomes - which settings file is selected, whether startup proceeds or aborts, where a banner ends up on screen - rather than on how those results are reached.
+
+The WPF hosts (`App`, `BannerWindow`) and the shell interop wrapper (`AppBarHelper`) are marked `[ExcludeFromCodeCoverage]`. They require a running message loop and a live shell, so their logic was factored into `CommandLineOptions`, `ConfigurationLoader`, and `BannerGeometry`, which are covered directly. Their remaining bodies are composition and P/Invoke declarations, and still need manual verification on a real multi-monitor desktop.

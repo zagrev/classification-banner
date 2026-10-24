@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -6,6 +7,12 @@ using System.Windows.Threading;
 
 namespace ClassificationBanner
 {
+    /// <summary>
+    /// Banner window host. Excluded from coverage because it requires a live WPF window and
+    /// a registered shell AppBar; its placement arithmetic is factored into
+    /// <see cref="BannerGeometry"/>.
+    /// </summary>
+    [ExcludeFromCodeCoverage]
     public partial class BannerWindow : Window
     {
         private AppBarHelper.ABEdge _edge;
@@ -70,22 +77,17 @@ namespace ClassificationBanner
             // every scaling factor.
             double scaleY = GetScaleY();
 
-            int thickness = (int)Math.Round(_config.BannerHeight * scaleY);
-            if (thickness < 1) thickness = 1;
+            int thickness = BannerGeometry.ComputeThickness(_config.BannerHeight, scaleY);
 
             // Request the full screen edge. The shell trims this during ABM_QUERYPOS so the
             // bar does not overlap the taskbar or any previously registered AppBar.
-            AppBarHelper.RECT desired = new AppBarHelper.RECT
-            {
-                Left = _screen.Bounds.Left,
-                Right = _screen.Bounds.Right,
-                Top = (_edge == AppBarHelper.ABEdge.ABE_TOP)
-                    ? _screen.Bounds.Top
-                    : _screen.Bounds.Bottom - thickness,
-                Bottom = (_edge == AppBarHelper.ABEdge.ABE_TOP)
-                    ? _screen.Bounds.Top + thickness
-                    : _screen.Bounds.Bottom
-            };
+            AppBarHelper.RECT desired = BannerGeometry.BuildDesiredRect(
+                _screen.Bounds.Left,
+                _screen.Bounds.Top,
+                _screen.Bounds.Right,
+                _screen.Bounds.Bottom,
+                _edge,
+                thickness);
 
             _grantedRect = AppBarHelper.RegisterBar(_hwnd, desired, _edge, thickness);
 
@@ -126,10 +128,12 @@ namespace ClassificationBanner
                 if (m11 > 0) scaleX = m11;
             }
 
-            this.Left = _grantedRect.Left / scaleX;
-            this.Top = _grantedRect.Top / scaleY;
-            this.Width = _grantedRect.Width / scaleX;
-            this.Height = _grantedRect.Height / scaleY;
+            var bounds = BannerGeometry.ToDeviceIndependentBounds(_grantedRect, scaleX, scaleY);
+
+            this.Left = bounds.Left;
+            this.Top = bounds.Top;
+            this.Width = bounds.Width;
+            this.Height = bounds.Height;
         }
 
         /// <summary>

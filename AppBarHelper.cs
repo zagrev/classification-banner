@@ -1,6 +1,14 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 
+/// <summary>
+/// Thin wrapper over the shell AppBar API. Excluded from coverage because every method is
+/// an interop call whose behaviour is defined by the running shell; the rectangle
+/// arithmetic it relies on lives in <see cref="ClassificationBanner.BannerGeometry"/>
+/// and is covered there.
+/// </summary>
+[ExcludeFromCodeCoverage]
 public static class AppBarHelper
 {
     [StructLayout(LayoutKind.Sequential)]
@@ -78,21 +86,7 @@ public static class AppBarHelper
 
         // 3. ABM_QUERYPOS only moves the docking edge; the opposite edge still holds the
         //    original value. Re-derive it so the bar keeps its intended thickness.
-        switch (edge)
-        {
-            case ABEdge.ABE_TOP:
-                abd.rc.Bottom = abd.rc.Top + thickness;
-                break;
-            case ABEdge.ABE_BOTTOM:
-                abd.rc.Top = abd.rc.Bottom - thickness;
-                break;
-            case ABEdge.ABE_LEFT:
-                abd.rc.Right = abd.rc.Left + thickness;
-                break;
-            case ABEdge.ABE_RIGHT:
-                abd.rc.Left = abd.rc.Right - thickness;
-                break;
-        }
+        abd.rc = ClassificationBanner.BannerGeometry.ApplyThickness(abd.rc, edge, thickness);
 
         // 4. Commit the final rectangle. The shell may adjust it once more.
         SHAppBarMessage((int)ABMsg.ABM_SETPOS, ref abd);

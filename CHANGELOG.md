@@ -14,6 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **DPI-aware banner thickness.** `BannerHeight` is now treated as a device-independent measurement and scaled to physical pixels using the window's `CompositionTarget.TransformToDevice`, so banners render at a consistent apparent size across display scaling factors.
 - **Per-monitor-v2 DPI awareness.** Added `<ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>` to the project file. Without it the process is system-DPI-aware and Windows virtualizes `Screen.Bounds` on monitors whose scaling differs from the primary display, offsetting AppBar placement. This is configured as a project property rather than in `app.manifest` because the WinForms SDK rejects manifest DPI settings with warning WFO0003.
 - `AppBarHelper.NotifyPosChanged` sends `ABM_WINDOWPOSCHANGED` after placement so the shell refreshes its work-area bookkeeping.
+- **Unit test suite.** New xUnit project at `tests/ClassificationBannerApp.Tests.csproj` with 76 tests covering command line interpretation, configuration loading and its failure policy, banner placement geometry, and the settings contract. Line coverage of the testable code is 100% (98.63% branch). Tests assert on observable behavior rather than implementation detail.
+- **Solution file.** Added `ClassificationBannerApp.sln` containing the application and test projects, so the suite is discoverable by Test Explorer and `dotnet test`.
 
 ### Fixed
 
@@ -26,6 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Top banner was still mis-located after the initial AppBar fix.** Placement was performed in `SourceInitialized`, which runs before WPF completes its own window placement during `Show()`. WPF then issued its own `SetWindowPos` using unset default `Left`/`Top`/`Width`/`Height` values, overwriting the negotiated coordinates. Placement now happens in the `Loaded` handler, and the granted rectangle is cached in `_grantedRect`.
 - **WPF managed layout properties disagreed with the native window rectangle.** `Left`, `Top`, `Width`, and `Height` are now synced to the granted rectangle (converted from physical pixels to DIPs), so subsequent layout passes no longer reposition the banner.
 - **Displaced banners never recovered.** The enforcement timer passed `SWP_NOMOVE | SWP_NOSIZE`, correcting only Z-order. It now re-asserts the full granted rectangle each tick.
+- **`CommandLineOptions` hardened against inputs the previous parser mishandled.** A trailing `--config` with no value now yields no override instead of falling through to later arguments; null and empty argument entries are skipped rather than treated as paths.
 
 ### Changed
 
@@ -35,12 +38,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Removed `StartupUri="MainWindow.xaml"` from `App.xaml`; banner windows are constructed directly in `OnStartup`.
 - Corrected the `xmlns:local` namespace in `BannerWindow.xaml` from `ClassificationBannerApp` to `ClassificationBanner`.
 - Added `<RootNamespace>ClassificationBanner</RootNamespace>` to `ClassificationBannerApp.csproj` so newly added files default to the correct namespace.
-- `LoadConfiguration` now accepts a nullable override path and distinguishes explicit from implicit configuration sources when handling errors.
-- Termination on fatal configuration errors uses `Environment.Exit` rather than `Application.Shutdown`, because `Shutdown` only posts a dispatcher request and would allow `OnStartup` to continue into registry writes and banner creation.
+- **Extracted testable logic from the WPF hosts.** Three new units were introduced so behavior could be verified without a desktop session:
+  - `CommandLineOptions` - argument grammar, path normalization, and construction of the startup registry command.
+  - `ConfigurationLoader` - settings resolution and load outcome, returning a `ConfigLoadResult` that separates the decision to abort from the act of aborting. File access is injected.
+  - `BannerGeometry` - thickness, desired rectangle, post-negotiation thickness re-derivation, and physical-to-logical bounds conversion.
+  `App`, `BannerWindow`, and `AppBarHelper` now delegate to these units rather than carrying private copies of the same logic.
+- Marked `App`, `BannerWindow`, and `AppBarHelper` `[ExcludeFromCodeCoverage]`; they require a live WPF message loop and shell, and their decision logic now lives in the extracted units.
+- Excluded `tests\**` from the application project's default compile glob, which was otherwise pulling test sources into the WPF temporary project and breaking the build.
 
 ### Removed
 
 - Deleted the unused `MainWindow.xaml` and `MainWindow.xaml.cs` scaffolding, which resided in the mismatched `ClassificationBannerApp` namespace.
+- Deleted the superseded private `ParseConfigPathArgument`, `NormalizePath`, and `LoadConfiguration` members from `App`, which had become dead duplicates of the extracted units.
 
 ## Known limitations
 
