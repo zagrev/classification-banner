@@ -8,5 +8,10 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
+    <!-- Per-monitor v2 DPI awareness. Configured here rather than in app.manifest
+         because the WinForms SDK rejects manifest DPI settings (WFO0003). Without
+         this, Windows virtualizes Screen.Bounds on monitors whose scaling differs
+         from the primary display, offsetting AppBar placement. -->
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
   </PropertyGroup>
 </Project>
