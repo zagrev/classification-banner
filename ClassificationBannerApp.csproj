@@ -3,9 +3,23 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net9.0-windows</TargetFramework>
+    <RootNamespace>ClassificationBanner</RootNamespace>
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
+    <!-- Per-monitor v2 DPI awareness. Configured here rather than in app.manifest
+         because the WinForms SDK rejects manifest DPI settings (WFO0003). Without
+         this, Windows virtualizes Screen.Bounds on monitors whose scaling differs
+         from the primary display, offsetting AppBar placement. -->
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
   </PropertyGroup>
+
+  <!-- The test project lives beneath this directory; keep its sources out of the
+       application's default compile glob. -->
+  <ItemGroup>
+    <Compile Remove="tests\**" />
+    <None Remove="tests\**" />
+    <Page Remove="tests\**" />
+  </ItemGroup>
 </Project>

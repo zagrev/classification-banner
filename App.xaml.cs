@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Windows;
 using System.Windows.Threading;
@@ -7,19 +8,41 @@ using Microsoft.Win32;
 
 namespace ClassificationBanner
 {
+    /// <summary>
+    /// Application composition root. Excluded from coverage because it requires a live WPF
+    /// message loop, the shell, and the registry; its decision logic is factored into
+    /// <see cref="CommandLineOptions"/> and <see cref="ConfigurationLoader"/>.
+    /// </summary>
+    [ExcludeFromCodeCoverage]
     public partial class App : System.Windows.Application
     {
         private BannerConfig _config = new BannerConfig();
         private List<BannerWindow> _activeBanners = new List<BannerWindow>();
         private DispatcherTimer? _rebuildDebounceTimer;
+        private string? _configPathOverride;
 
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
 
-            // Load configurations first
-            _config = LoadConfiguration();
+            // There is no main window; RebuildBanners closes every window before
+            // recreating them, which would otherwise terminate the process.
+            this.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
+            // Resolve any user-supplied settings file before configuration load
+            _configPathOverride = CommandLineOptions.ParseConfigPath(e.Args);
+
+            // Load configurations first - terminates the process on an invalid explicit path
+            var result = new ConfigurationLoader().Load(_configPathOverride);
+
+            if (result.IsFatal)
+            {
+                FailFast(result.ErrorMessage ?? "The settings file could not be loaded.");
+            }
+
+            _config = result.Config;
+
+            // Only reached when configuration is valid, so the registry entry is safe to write
             EnsureStartupRegistration();
 
             // Perform initial window distribution layout
@@ -86,28 +109,22 @@ namespace ClassificationBanner
             base.OnExit(e);
         }
 
-        private BannerConfig LoadConfiguration()
+        /// <summary>
+        /// Reports an unrecoverable configuration error and terminates the process.
+        /// Does not return.
+        /// </summary>
+        private void FailFast(string message)
         {
-            string configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
+            MessageBox.Show(
+                $"{message}\n\nThe classification banner will not start.",
+                "Classification Banner - Configuration Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
 
-            if (!File.Exists(configPath))
-            {
-                return new BannerConfig();
-            }
-
-            try
-            {
-                string jsonText = File.ReadAllText(configPath);
-                var parsedConfig = System.Text.Json.JsonSerializer.Deserialize<BannerConfig>(jsonText);
-                return parsedConfig ?? new BannerConfig();
-            }
-            catch
-            {
-                return new BannerConfig(); // Safe fallback to hardcoded defaults on parsing issues
-            }
+            Environment.Exit(1);
         }
-    
-     private const string RegistryKeyName = "WindowsClassificationBanner";
+
+        private const string RegistryKeyName = "WindowsClassificationBanner";
 
         private void EnsureStartupRegistration()
         {
@@ -124,7 +141,9 @@ namespace ClassificationBanner
                     {
                         // Check if it's already registered correctly
                         object? existingValue = key.GetValue(RegistryKeyName);
-                        string expectedValue = $"\"{executablePath}\"";
+
+                        // Persist the settings file selection so it survives a reboot
+                        string expectedValue = CommandLineOptions.BuildStartupCommand(executablePath, _configPathOverride);
 
                         if (existingValue == null || existingValue.ToString() != expectedValue)
                         {
