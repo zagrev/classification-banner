@@ -19,6 +19,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **GitHub Actions build pipeline.** New `.github/workflows/build.yml` runs on push and pull request to `main`/`master`, and on manual dispatch. It restores, builds in `Release`, runs the test suite with coverage collection, verifies the coverage threshold, and publishes the application on a `windows-latest` runner, which is required because `net9.0-windows` with WPF cannot be built on Linux. Test results, coverage reports, and published binaries are uploaded as artifacts; the first two use `if: always()` so failing runs remain diagnosable.
 - **Coverage threshold gate.** New `build/Check-Coverage.ps1` parses the Cobertura report, prints a per-class breakdown, and exits non-zero when overall line coverage falls below a required minimum (85% in CI). It also fails when no coverage report is found, so a silently skipped collection step cannot pass the gate. The script is runnable locally with the same arguments CI uses.
 - **Self-contained single-file publish.** The pipeline now publishes a `win-x64` self-contained single-file executable so the banner can be deployed to locked-down workstations with no .NET runtime installed. `appsettings.json` is deliberately excluded from the bundle and ships beside the executable so markings remain editable without a rebuild.
+- **Automatic versioning, tagging, and GitHub releases.** New `.github/workflows/release.yml` runs on pushes to the default branch and on manual dispatch. After a successful build, test run, and coverage check it increments `VERSION`, verifies the tag is free, publishes a self-contained single-file executable, packages it as a zip, commits and pushes the bump, creates an annotated `vMAJOR.MINOR.PATCH` tag, and publishes a GitHub release with generated notes and the archive attached.
+- **Single source of version truth.** New `VERSION` file holding `MAJOR.MINOR.PATCH`, read by a new `Directory.Build.props` which applies `Version`, `AssemblyVersion`, `FileVersion`, and `InformationalVersion` to every project. All version attributes are three-part; no build or revision component is appended.
+- **Version bump script.** New `build/Bump-Version.ps1` increments the major, minor, or patch component, validates the existing value, supports `-WhatIfOnly` for dry runs, and emits `version`, `previous-version`, and `tag` as GitHub Actions step outputs.
 
 ### Fixed
 
@@ -36,20 +39,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- `AppBarHelper.RegisterBar` signature changed to `RECT RegisterBar(IntPtr hwnd, RECT desiredRect, ABEdge edge, int thickness)`. It previously returned `void` and took no thickness argument.
-- `AppBarHelper.RECT` gained `Width` and `Height` convenience properties, and `SWP_NOZORDER` was added to the flag constants.
-- `BannerWindow` no longer sets `Top`, `Left`, `Width`, or `Height`; `WindowStartupLocation` is set to `Manual` and all placement happens in `SourceInitialized`.
-- Removed `StartupUri="MainWindow.xaml"` from `App.xaml`; banner windows are constructed directly in `OnStartup`.
-- Corrected the `xmlns:local` namespace in `BannerWindow.xaml` from `ClassificationBannerApp` to `ClassificationBanner`.
-- Added `<RootNamespace>ClassificationBanner</RootNamespace>` to `ClassificationBannerApp.csproj` so newly added files default to the correct namespace.
-- **Extracted testable logic from the WPF hosts.** Three new units were introduced so behavior could be verified without a desktop session:
-  - `CommandLineOptions` - argument grammar, path normalization, and construction of the startup registry command.
-  - `ConfigurationLoader` - settings resolution and load outcome, returning a `ConfigLoadResult` that separates the decision to abort from the act of aborting. File access is injected.
-  - `BannerGeometry` - thickness, desired rectangle, post-negotiation thickness re-derivation, and physical-to-logical bounds conversion.
-  `App`, `BannerWindow`, and `AppBarHelper` now delegate to these units rather than carrying private copies of the same logic.
-- Marked `App`, `BannerWindow`, and `AppBarHelper` `[ExcludeFromCodeCoverage]`; they require a live WPF message loop and shell, and their decision logic now lives in the extracted units.
-- Excluded `tests\**` from the application project's default compile glob, which was otherwise pulling test sources into the WPF temporary project and breaking the build.
-- Added `.vs/` and `publish/` to `.gitignore`; the Visual Studio workspace folder was previously untracked-but-not-ignored, and the pipeline's local publish output would otherwise appear as pending changes.
+- **Release versions are now strictly three-part.** `FileVersion` previously appended the CI run number, producing `MAJOR.MINOR.PATCH.BUILD`, and `InformationalVersion` carried the SDK's `+<commit sha>` suffix. Both now read exactly `MAJOR.MINOR.PATCH`. The `BuildNumber` property was removed from `Directory.Build.props` and the `-p:BuildNumber=` argument dropped from both workflows, and `IncludeSourceRevisionInInformationalVersion` is set to `false` to suppress the commit suffix.
+- README now documents both release assets in detail, including extracted and zipped sizes, guidance on choosing between them, and the runtime dependency each carries. The framework-dependent build requires the .NET 9 **Desktop** Runtime (`Microsoft.WindowsDesktop.App`); the base `Microsoft.NETCore.App` runtime does not contain the WPF or Windows Forms assemblies and is not sufficient.
+- Corrected two stale README passages: the continuous integration section still described `build.yml` as running on pushes to `main`/`master` and listed three artifacts, and a leftover paragraph described a single self-contained publish.
 
 ### Removed
 

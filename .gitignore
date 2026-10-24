@@ -61,3 +61,6 @@ nunit-*.xml
 
 # Local publish output (produced by the build pipeline)
 publish/
+
+# Release archives produced by the release pipeline
+ClassificationBannerApp-v*.zip

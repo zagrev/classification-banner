@@ -2,7 +2,7 @@ name: Build
 
 on:
   push:
-    branches: [ main, master ]
+    branches-ignore: [ main, master ]
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:
@@ -71,10 +71,9 @@ jobs:
           name: coverage
           path: TestResults/**/coverage.cobertura.xml
 
-      - name: Publish
-        # Self-contained single file so the banner can be deployed to locked-down
-        # workstations without the .NET runtime installed. appsettings.json is
-        # deliberately left alongside the executable so it remains operator-editable.
+      - name: Publish self-contained
+        # Mirrors the Release workflow so packaging problems surface on pull requests
+        # rather than at release time.
         run: >
           dotnet publish ${{ env.APP_PROJECT }}
           --configuration ${{ env.CONFIGURATION }}
@@ -82,10 +81,25 @@ jobs:
           --self-contained true
           -p:PublishSingleFile=true
           -p:IncludeNativeLibrariesForSelfExtract=true
-          --output publish
+          --output publish/self-contained
 
-      - name: Upload application
+      - name: Publish framework-dependent
+        run: >
+          dotnet publish ${{ env.APP_PROJECT }}
+          --configuration ${{ env.CONFIGURATION }}
+          --runtime ${{ env.RUNTIME_IDENTIFIER }}
+          --self-contained false
+          -p:PublishSingleFile=true
+          --output publish/framework-dependent
+
+      - name: Upload self-contained artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ClassificationBannerApp-${{ env.RUNTIME_IDENTIFIER }}
-          path: publish
+          name: ClassificationBannerApp-${{ env.RUNTIME_IDENTIFIER }}-self-contained
+          path: publish/self-contained
+
+      - name: Upload framework-dependent artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClassificationBannerApp-${{ env.RUNTIME_IDENTIFIER }}-framework-dependent
+          path: publish/framework-dependent

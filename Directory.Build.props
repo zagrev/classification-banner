@@ -1,0 +1,35 @@
+<Project>
+
+  <!--
+    Single source of version truth. The VERSION file holds "MAJOR.MINOR.PATCH" and is
+    incremented by the release pipeline on each successful build of the default branch.
+    Every version attribute is three-part; no build number component is appended.
+  -->
+  <PropertyGroup>
+    <_VersionFile>$(MSBuildThisFileDirectory)VERSION</_VersionFile>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(VersionPrefix)' == '' And Exists('$(_VersionFile)')">
+    <VersionPrefix>$([System.IO.File]::ReadAllText('$(_VersionFile)').Trim())</VersionPrefix>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(VersionPrefix)' == ''">
+    <VersionPrefix>1.0.0</VersionPrefix>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <Version>$(VersionPrefix)</Version>
+    <AssemblyVersion>$(VersionPrefix)</AssemblyVersion>
+    <FileVersion>$(VersionPrefix)</FileVersion>
+    <InformationalVersion>$(VersionPrefix)</InformationalVersion>
+
+    <!-- Keep InformationalVersion exactly MAJOR.MINOR.PATCH; the SDK otherwise appends
+         "+<commit sha>" to it. -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+
+    <Product>Classification Banner</Product>
+    <Company>zagrev</Company>
+    <Copyright>Copyright (c) $([System.DateTime]::UtcNow.Year)</Copyright>
+  </PropertyGroup>
+
+</Project>
