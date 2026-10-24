@@ -17,6 +17,10 @@ namespace ClassificationBanner
         {
             base.OnStartup(e);
 
+            // There is no main window; RebuildBanners closes every window before
+            // recreating them, which would otherwise terminate the process.
+            this.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
             // Load configurations first
             _config = LoadConfiguration();
 
@@ -106,8 +110,8 @@ namespace ClassificationBanner
                 return new BannerConfig(); // Safe fallback to hardcoded defaults on parsing issues
             }
         }
-    
-     private const string RegistryKeyName = "WindowsClassificationBanner";
+
+        private const string RegistryKeyName = "WindowsClassificationBanner";
 
         private void EnsureStartupRegistration()
         {
