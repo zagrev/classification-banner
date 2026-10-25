@@ -8,7 +8,9 @@
             <Setter Property="FontSize" Value="{DynamicResource ConfigFontSize}"/>
             <Setter Property="FontWeight" Value="{DynamicResource ConfigFontWeight}"/>
             <Setter Property="FontStyle" Value="{DynamicResource ConfigFontStyle}"/>
-            <Setter Property="Margin" Value="100,0"/>
+        </Style>
+        <Style TargetType="Border">
+            <Setter Property="Padding" Value="15,0"/>
         </Style>
     </Application.Resources>
 </Application>
