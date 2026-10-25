@@ -93,6 +93,83 @@ A recognised token whose value is unavailable - `{ipaddress}` on an offline mach
 Only `{ipaddress}`, `{macaddress}`, `{date}`, `{time}`, and `{datetime}` are re-evaluated on the refresh timer.
 An edge containing only static text is never refreshed.
 
+### Standard classification levels and colors
+
+The colors below follow the convention used by US government marking guidance, where each
+classification level has an associated background color with either black or white text
+chosen for contrast. Verify them against your own organization's marking policy before
+deployment; this table is a convenience, not an authority.
+
+| Level | Background | Foreground | Swatch |
+| --- | --- | --- | --- |
+| UNCLASSIFIED | `#FF007A33` (green) | `#FFFFFFFF` (white) | ?? |
+| CUI / CONTROLLED UNCLASSIFIED INFORMATION | `#FF502B85` (purple) | `#FFFFFFFF` (white) | ?? |
+| CONFIDENTIAL | `#FF0033A0` (blue) | `#FFFFFFFF` (white) | ?? |
+| SECRET | `#FFC8102E` (red) | `#FFFFFFFF` (white) | ?? |
+| TOP SECRET | `#FFFF8C00` (orange) | `#FF000000` (black) | ?? |
+| TOP SECRET // SCI | `#FFFCE300` (yellow) | `#FF000000` (black) | ?? |
+
+Note the foreground change at TOP SECRET and above: orange and yellow backgrounds need
+black text to stay legible, whereas the darker levels take white.
+
+**Example - SECRET workstation**
+
+```
+{
+  "ClassificationText": "SECRET",
+  "BackgroundColorHex": "#FFC8102E",
+  "ForegroundColorHex": "#FFFFFFFF",
+  "BannerHeight": 30,
+  "Top": {
+    "Left": "{hostname}",
+    "Center": "SECRET",
+    "Right": "{ipaddress}"
+  },
+  "Bottom": {
+    "Center": "SECRET"
+  }
+}
+```
+
+**Example - UNCLASSIFIED workstation, minimal**
+
+```
+{
+  "ClassificationText": "UNCLASSIFIED",
+  "BackgroundColorHex": "#FF007A33",
+  "ForegroundColorHex": "#FFFFFFFF"
+}
+```
+
+With no `Top` or `Bottom` section, both banners show `ClassificationText` centered.
+
+**Example - TOP SECRET // SCI with dissemination controls**
+
+```
+{
+  "ClassificationText": "TOP SECRET // SCI",
+  "BackgroundColorHex": "#FFFCE300",
+  "ForegroundColorHex": "#FF000000",
+  "BannerHeight": 35,
+  "TextRefreshIntervalSeconds": 30,
+  "Top": {
+    "Left": "{hostname}",
+    "Center": "TOP SECRET // SCI // NOFORN",
+    "Right": "{ipaddress}"
+  },
+  "Bottom": {
+    "Left": "{domain}\\{username}",
+    "Center": "TOP SECRET // SCI // NOFORN",
+    "Right": "{datetime}"
+  }
+}
+```
+
+Colors accept either `#AARRGGBB` or `#RRGGBB`. The alpha channel is included above for
+explicitness; `#007A33` is equivalent to `#FF007A33` since banners are fully opaque.
+An unparseable color silently falls back to red on white, which would misrepresent the
+level, so test any custom value before deploying it.
+
 ## Build and run
 
 | Argument | Description |
