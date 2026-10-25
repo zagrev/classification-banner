@@ -26,9 +26,8 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          # The app targets net9.0-windows. The 10.x SDK is installed alongside so the
-          # build matches local development, where the solution uses the .slnx format
-          # that older SDKs cannot parse.
+          # The app targets net9.0-windows; the 10.x SDK is installed alongside to match
+          # local development machines.
           dotnet-version: |
             9.0.x
             10.0.x

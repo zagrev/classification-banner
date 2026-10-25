@@ -13,6 +13,8 @@ This application can show the classification at the top and bottom of the screen
 - **Always-on-top enforcement** - a timer periodically reasserts topmost Z-order using `SetWindowPos` with `SWP_NOACTIVATE`, so focus is never stolen from the active application.
 - **Display-change resilience** - banners are rebuilt when `SystemEvents.DisplaySettingsChanged` fires, debounced by 500 ms so a burst of notifications triggers only one rebuild.
 - **JSON configuration** - banner text, colors, height, and enforcement interval are read from a settings file at startup.
+- **Per-edge, three-cell text** - the top and bottom banners can each show different text, and each carries independent left, center, and right cells.
+- **Live system tokens** - cells can embed `{hostname}`, `{ipaddress}`, `{username}`, `{domain}`, `{macaddress}`, `{date}`, `{time}`, or `{datetime}`, refreshed periodically when the value can change.
 - **Selectable settings file** - the configuration file can be chosen on the command line, which is useful for per-environment or per-classification deployments.
 - **Fail-fast on bad configuration** - an explicitly requested settings file that is missing or malformed aborts startup with an error dialog rather than silently displaying default markings.
 - **Automatic startup registration** - the executable registers itself under `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run`, preserving the selected settings file, and fails silently when blocked by group policy.
@@ -20,33 +22,76 @@ This application can show the classification at the top and bottom of the screen
 
 ## Known limitations
 
--By design, the banners cannot be moved, resized, or dismissed by the user - they are docked to the screen.	
-The process must be terminated through Task Manager or by removing it from startup.
-
--AppBar space negotiation is performed by the shell primarily for the primary display. On secondary monitors the banner is positioned correctly, but the desktop work area may not be reduced, so maximized windows can be covered.
-
--A settings file can parse successfully while still being semantically wrong. A `BannerHeight` of `0` is clamped to a single pixel, and an unparseable color falls back to red on white, which misrepresents the configured classification color. Semantic validation is not yet implemented.
-
--The system tray option described above is not yet implemented.
+- By design, the banners cannot be moved, resized, or dismissed by the user - they are docked to the screen.	
+  The process must be terminated through Task Manager or by removing it from startup.
+- AppBar space negotiation is performed by the shell primarily for the primary display.
+  On secondary monitors the banner is positioned correctly, but the desktop work area may not be reduced, so maximized windows can be covered.
+- A settings file can parse successfully while still being semantically wrong.
+  A `BannerHeight` of `0` is clamped to a single pixel, and an unparseable color falls back to red on white, which misrepresents the configured classification color.
+- Semantic validation is not yet implemented.
+- The system tray option described above is not yet implemented.
 
 ## Configuration
 
 | Setting | Type | Default | Description |
 | --- | --- | --- | --- |
-| `ClassificationText` | string | `UNCLASSIFIED` | Text rendered in both banners |
+| `ClassificationText` | string | `UNCLASSIFIED` | Fallback text, centered, for any edge without its own configuration |
 | `BackgroundColorHex` | string | `#FF008000` | Banner background, `#AARRGGBB` or `#RRGGBB` |
 | `ForegroundColorHex` | string | `#FFFFFF` | Banner text color |
 | `BannerHeight` | int | `30` | Banner height in device-independent pixels |
 | `EnforcementIntervalMs` | int | `500` | Z-order enforcement timer interval |
+| `TextRefreshIntervalSeconds` | int | `30` | How often text containing a time-varying token is re-evaluated; `0` disables refresh |
+| `Top` | object | _unset_ | Left, center, and right text for the top banner |
+| `Bottom` | object | _unset_ | Left, center, and right text for the bottom banner |
 
-Configuration failure behavior differs depending on how the file was selected:
+### Banner text
 
-| Scenario | Result |
-| --- | --- |
-| No `--config`, default file present and valid | Loads file |
-| No `--config`, default file absent or malformed | Silent fallback to built-in defaults |
-| `--config <path>`, file valid | Loads file |
-| `--config <path>`, file missing, malformed, or empty | Error dialog, process exits with code 1 |
+`Top` and `Bottom` are configured independently, and each accepts `Left`, `Center`, and `Right`. 
+Any cell may be omitted.
+The center cell is centered on the screen regardless of how wide the side cells are, so a long hostname never pushes the classification marking off-center.
+
+```
+{
+  "ClassificationText": "TOP SECRET // SCI",
+  "TextRefreshIntervalSeconds": 30,
+  "Top": {
+    "Left": "{hostname}",
+    "Center": "TOP SECRET // SCI",
+    "Right": "{ipaddress}"
+  },
+  "Bottom": {
+    "Left": "{domain}\\{username}",
+    "Center": "TOP SECRET // SCI",
+    "Right": "{datetime}"
+  }
+}
+```
+
+If an edge is omitted entirely, or all three of its cells are blank, that banner falls back to `ClassificationText` centered.
+Settings files written before this feature existed therefore render exactly as before.
+
+### Tokens
+
+| Token | Expands to | Example |
+| --- | --- | --- |
+| `{hostname}` | Machine name | `WS-12345` |
+| `{ipaddress}` | IPv4 address of the first non-loopback interface | `10.1.2.3` |
+| `{username}` | Logged-on user | `jdoe` |
+| `{domain}` | User's domain | `CONTOSO` |
+| `{macaddress}` | MAC of the first non-loopback interface | `00:1A:2B:3C:4D:5E` |
+| `{date}` | Current date | `2024-03-07` |
+| `{time}` | Current time | `14:05` |
+| `{datetime}` | Current date and time | `2024-03-07 14:05` |
+
+Token names are case-insensitive. Tokens may be mixed with literal text, as in `"Host: {hostname}"`.
+Write `{{` or `}}` for a literal brace.
+
+An **unrecognised token is left on screen verbatim**, braces included, rather than silently expanding to nothing.
+A typo is then visible to the operator instead of quietly blanking part of a marking.
+A recognised token whose value is unavailable - `{ipaddress}` on an offline machine, for instance - expands to an empty string.
+
+Only `{ipaddress}`, `{macaddress}`, `{date}`, `{time}`, and `{datetime}` are re-evaluated on the refresh timer.
+An edge containing only static text is never refreshed.
 
 ## Build and run
 
@@ -55,7 +100,8 @@ Configuration failure behavior differs depending on how the file was selected:
 | `--config <path>`, `-c <path>` | Path to the settings file. Also accepts `--config=<path>` and `-c=<path>`. |
 | `<path>` | A single bare path is treated as the settings file. |
 
-Relative paths resolve against the current working directory. The selected path is written into the startup registry entry, so the choice persists across reboots.
+Relative paths resolve against the current working directory. 
+The selected path is written into the startup registry entry, so the choice persists across reboots.
 
 ## Tests
 
