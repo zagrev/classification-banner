@@ -1,6 +1,0 @@
-<Solution>
-  <Folder Name="/tests/">
-    <Project Path="tests/ClassificationBannerApp.Tests.csproj" />
-  </Folder>
-  <Project Path="ClassificationBannerApp.csproj" />
-</Solution>

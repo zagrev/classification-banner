@@ -19,16 +19,28 @@ namespace ClassificationBanner
         private System.Windows.Forms.Screen _screen;
         private BannerConfig _config;
         private DispatcherTimer _zOrderTimer;
+        private DispatcherTimer? _textRefreshTimer;
+        private readonly ISystemInfoProvider _systemInfo;
         private IntPtr _hwnd;
         private AppBarHelper.RECT _grantedRect;
         private bool _placed;
 
         public BannerWindow(System.Windows.Forms.Screen screen, AppBarHelper.ABEdge edge, BannerConfig config)
+            : this(screen, edge, config, new SystemInfoProvider())
+        {
+        }
+
+        public BannerWindow(
+            System.Windows.Forms.Screen screen,
+            AppBarHelper.ABEdge edge,
+            BannerConfig config,
+            ISystemInfoProvider systemInfo)
         {
             InitializeComponent();
             _screen = screen;
             _edge = edge;
             _config = config;
+            _systemInfo = systemInfo ?? new SystemInfoProvider();
 
             // Apply configuration parameters dynamically
             ApplyConfigStyles();
@@ -48,24 +60,67 @@ namespace ClassificationBanner
             _zOrderTimer.Interval = TimeSpan.FromMilliseconds(_config.EnforcementIntervalMs);
             _zOrderTimer.Tick += EnforceAlwaysOnTopLoop;
             _zOrderTimer.Start();
+
+            StartTextRefreshIfNeeded();
+        }
+
+        /// <summary>
+        /// Starts a low-frequency refresh only when this edge's text contains a token whose
+        /// value changes over time. Static text is never re-evaluated.
+        /// </summary>
+        private void StartTextRefreshIfNeeded()
+        {
+            if (_config.TextRefreshIntervalSeconds <= 0) return;
+
+            BannerEdgeConfig edgeText = _config.GetEdge(_edge);
+
+            if (!BannerTextResolver.ContainsVolatileToken(edgeText.Left)
+                && !BannerTextResolver.ContainsVolatileToken(edgeText.Center)
+                && !BannerTextResolver.ContainsVolatileToken(edgeText.Right))
+            {
+                return;
+            }
+
+            _textRefreshTimer = new DispatcherTimer(DispatcherPriority.Background);
+            _textRefreshTimer.Interval = TimeSpan.FromSeconds(_config.TextRefreshIntervalSeconds);
+            _textRefreshTimer.Tick += (s, e) => ApplyEdgeText();
+            _textRefreshTimer.Start();
         }
 
         private void ApplyConfigStyles()
         {
+            System.Windows.Media.Brush foreground;
+
             try
             {
                 var bc = new BrushConverter();
                 this.Background = (System.Windows.Media.Brush)bc.ConvertFromString(_config.BackgroundColorHex)!;
-                BannerText.Foreground = (System.Windows.Media.Brush)bc.ConvertFromString(_config.ForegroundColorHex)!;
+                foreground = (System.Windows.Media.Brush)bc.ConvertFromString(_config.ForegroundColorHex)!;
             }
             catch
             {
                 // Fallback UI defaults if configuration hex values are corrupt
                 this.Background = System.Windows.Media.Brushes.Red;
-                BannerText.Foreground = System.Windows.Media.Brushes.White;
+                foreground = System.Windows.Media.Brushes.White;
             }
 
-            BannerText.Text = _config.ClassificationText;
+            BannerTextLeft.Foreground = foreground;
+            BannerText.Foreground = foreground;
+            BannerTextRight.Foreground = foreground;
+
+            ApplyEdgeText();
+        }
+
+        /// <summary>
+        /// Resolves this edge's configured text, expanding tokens such as {hostname}.
+        /// </summary>
+        private void ApplyEdgeText()
+        {
+            BannerEdgeConfig edgeText = _config.GetEdge(_edge);
+
+            BannerTextLeft.Text = BannerTextResolver.Resolve(edgeText.Left, _systemInfo);
+            BannerText.Text = BannerTextResolver.Resolve(edgeText.Center, _systemInfo);
+            BannerTextRight.Text = BannerTextResolver.Resolve(edgeText.Right, _systemInfo);
         }
 
         private void BannerWindow_SourceInitialized(object? sender, EventArgs e)
@@ -182,6 +237,8 @@ namespace ClassificationBanner
         private void BannerWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
         {
             _zOrderTimer.Stop();
+            _textRefreshTimer?.Stop();
+
             if (_hwnd != IntPtr.Zero)
             {
                 AppBarHelper.UnregisterBar(_hwnd);

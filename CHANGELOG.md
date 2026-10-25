@@ -39,9 +39,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- **Release versions are now strictly three-part.** `FileVersion` previously appended the CI run number, producing `MAJOR.MINOR.PATCH.BUILD`, and `InformationalVersion` carried the SDK's `+<commit sha>` suffix. Both now read exactly `MAJOR.MINOR.PATCH`. The `BuildNumber` property was removed from `Directory.Build.props` and the `-p:BuildNumber=` argument dropped from both workflows, and `IncludeSourceRevisionInInformationalVersion` is set to `false` to suppress the commit suffix.
-- README now documents both release assets in detail, including extracted and zipped sizes, guidance on choosing between them, and the runtime dependency each carries. The framework-dependent build requires the .NET 9 **Desktop** Runtime (`Microsoft.WindowsDesktop.App`); the base `Microsoft.NETCore.App` runtime does not contain the WPF or Windows Forms assemblies and is not sufficient.
-- Corrected two stale README passages: the continuous integration section still described `build.yml` as running on pushes to `main`/`master` and listed three artifacts, and a leftover paragraph described a single self-contained publish.
+- `BannerWindow.xaml` now hosts three overlaid text cells rather than one centered `TextBlock`, each with `TextTrimming="CharacterEllipsis"` so over-long text truncates instead of overlapping an adjacent cell.
+- `BannerWindow` gained a constructor overload accepting an `ISystemInfoProvider`; the existing three-argument constructor delegates to it with the live provider.
+- The sample `appsettings.json` now demonstrates per-edge text and tokens.
+- Marked `SystemInfoProvider` `[ExcludeFromCodeCoverage]`; every member queries live operating system or network hardware state and cannot be exercised deterministically.
 
 ### Removed
 
