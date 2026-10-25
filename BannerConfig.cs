@@ -30,6 +30,11 @@ namespace ClassificationBanner
         public BannerEdgeConfig? Bottom { get; set; }
 
         /// <summary>
+        ///The font to use when rendering the banner text. This includes the font family, size, weight, and style.
+        /// </summary>
+        public FontSettings Font { get; set; } = new FontSettings();
+
+        /// <summary>
         /// Resolves the layout for one edge. Falls back to <see cref="ClassificationText"/>
         /// centered when that edge is not configured, so settings files written before
         /// per-edge text was supported continue to render unchanged.

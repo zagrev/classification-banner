@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -132,6 +133,9 @@ namespace ClassificationBanner
             // every scaling factor.
             double scaleY = GetScaleY();
 
+            // get the height of the banner in physical pixels for the configured font size and scaling factor.
+            // This is the thickness of the AppBar that will be requested from the shell.
+            _config.BannerHeight = GetFontHeight(_config.Font);
             int thickness = BannerGeometry.ComputeThickness(_config.BannerHeight, scaleY);
 
             // Request the full screen edge. The shell trims this during ABM_QUERYPOS so the
@@ -150,6 +154,20 @@ namespace ClassificationBanner
             // Without this, the next layout pass re-applies the stale default values and
             // moves the window off the reserved area.
             SyncManagedBounds();
+        }
+
+        private int GetFontHeight(FontSettings font)
+        {
+            FormattedText formattedText = new FormattedText(
+                "Hg", // Use characters with ascenders and descenders to get full line bounds
+                CultureInfo.InvariantCulture,
+                FlowDirection.LeftToRight,
+                new Typeface(font.Family),
+                font.Size,
+                Brushes.Black,
+                VisualTreeHelper.GetDpi(this).PixelsPerDip);
+
+            return (int)(formattedText.Height * 2);
         }
 
         private void BannerWindow_Loaded(object? sender, RoutedEventArgs e)

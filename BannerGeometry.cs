@@ -20,7 +20,7 @@ namespace ClassificationBanner
             }
 
             int thickness = (int)Math.Round(bannerHeightDips * scale);
-            return thickness < 1 ? 1 : thickness;
+            return thickness < 10 ? 10 : thickness;
         }
 
         /// <summary>
